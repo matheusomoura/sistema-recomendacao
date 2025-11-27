@@ -1,3 +1,8 @@
+![status](https://img.shields.io/badge/status-finalizado-brightgreen)
+![python](https://img.shields.io/badge/Python-3.11-blue)
+![fastapi](https://img.shields.io/badge/FastAPI-API%20REST-brightgreen)
+
+
 # 📚 Sistema de Recomendação – MovieLens  
 Trabalho Final – Desenvolvimento de Sistemas de IA 
 
@@ -17,60 +22,87 @@ Desenvolver um **Sistema de Recomendação funcional**, utilizando:
 - Container Docker  
 - Dataset MovieLens (ml-latest-small)
 
-O sistema recomenda:
+O objetivo é entregar uma API funcional, capaz de:
 
-- Filmes semelhantes a um filme específico  
-- Filmes personalizados para um usuário baseado no histórico de avaliações  
+- Recomendação de filmes similares  
+- Recomendação personalizada baseada no histórico do usuário  
 
 ---
 
 ## 🏗️ Arquitetura da Solução
 
-
-│ ├── main.py → API FastAPI
-
-│ ├── model.py → Modelo de recomendação
-
-│ └── init.py
+```bash
+sistema-recomendacao/
 │
-
+├── app/
+│   ├── main.py          # API FastAPI
+│   ├── model.py         # Modelo de recomendação
+│   └── __init__.py
+│
 ├── data/
-
-│ └── ml-latest-small/ → Dataset MovieLens
-
+│   └── ml-latest-small/ # Dataset MovieLens
 │
-
-├── test_model.py → Testes do modelo
-
-├── check_dataset.py → Teste de leitura do dataset
-
+├── tests/
+│   ├── test_api.py      # Testes da API
+│   └── test_model.py    # Testes do modelo
 │
-
-├── Dockerfile → Container Docker
-
-├── requirements.txt → Dependências
-
-└── README.md → Documentação
+├── check_dataset.py     # Teste rápido de leitura dos dados
+├── Dockerfile           # Configuração Docker
+├── docker-compose.yml   # Orquestração do container
+├── requirements.txt     # Dependências do projeto
+└── README.md            # Documentação oficial
+```
 
 ---
 
 ## 🤖 Modelo de Recomendação
 
-Foi utilizada a técnica de **Filtragem Colaborativa Baseada em Itens (Item-Based Collaborative Filtering)**.
+O sistema utiliza a técnica de **Item-Based Collaborative Filtering (Filtragem Colaborativa Baseada em Itens)**, amplamente utilizada em sistemas reais como Amazon e Netflix.
 
 ### **Etapas do modelo:**
 
-1. Carregar notas dos usuários (`ratings.csv`)  
-2. Construir matriz usuário x filme  
-3. Transpor matriz (filme x usuário)  
+1. Carregamento dos dados do MovieLens (`ratings.csv` e `movies.csv`)
+2. Criação da matriz usuário x filme 
+3. Transposição para obter matriz filme x usuário
 4. Calcular **cosine_similarity** entre filmes  
 5. Recomendar:  
-   - **similaridade entre filmes**  
-   - **filmes para um usuário específico** (somatório ponderado de similaridade)
+   - **get_similar_movies(movie_id)**  
+   - **recommend_for_user(user_id)**
 
 ---
 
-## 🚀 Como rodar o projeto (local)
+## 🧠 Decisões
+
+### ✦ Por que Filtragem Colaborativa Baseada em Itens?
+- Produz recomendações mais explicáveis para o usuário (“filmes parecidos com X”).
+- Tem custo computacional menor que filtragem baseada em usuários.
+- Funciona bem mesmo em bases mais esparsas.
+
+### ✦ Por que Similaridade do Cosseno?
+- Métrica ideal para matrizes esparsas com muitos zeros.
+- Resistente a variações na escala de notas.
+- Utilizada na literatura e em aplicações reais de recomendação.
+
+### ✦ Por que MovieLens?
+- Dataset acadêmico padrão mundial.
+- Estruturado, limpo, fácil de testar e validar.
+- Representa cenários reais de recomendação.
+
+### ✦ Por que FastAPI?
+- Documentação automática no Swagger UI.
+- Alta performance.
+- Simples integração com Docker e testes automatizados.
+
+### ✦ Estrutura de dados e lógica
+- Matrizes e cálculos tratados com `NumPy` e `Pandas`.
+- Similaridade pré-computada para melhorar desempenho.
+- Recomendações do usuário utilizam média ponderada pelas avaliações.
+
+  ---
+
+## 📦 Instalação e Execução
+
+### 🚀 Executando localmente
 
 ### 1. Criar ambiente virtual
 ```bash
@@ -92,11 +124,11 @@ uvicorn app.main:app --reload
 ### Acessar:
 ➡ http://127.0.0.1:8000
 
-➡ http://127.0.0.1:8000/docs
+➡ http://127.0.0.1:8000/docs → Documentação automática
 
 ---
 
-## 🐳 Como rodar o projeto via Docker
+## 🐳 Executando com Docker
 
 ### 1. Construir imagem
 ```bash
@@ -108,6 +140,11 @@ docker build -t sistema-recomendacao .
 docker run -p 8000:8000 sistema-recomendacao
 ```
 
+### Ou via Docker Compose
+```bash
+docker-compose up --build
+```
+
 ### Acessar:
 ➡ http://127.0.0.1:8000
 
@@ -115,10 +152,32 @@ docker run -p 8000:8000 sistema-recomendacao
 
 ---
 
-## 🧪 Endpoints
+## 🧪 Testes Automatizados
+O projeto possui testes unitários para:
+
+### ✔ Modelo de recomendação
+- Similaridade
+- Recomendações do Usuário
+
+### API FastAPI
+- `/`
+- `/similar/{movie_id}`
+- `/user/{user_id}`
+- `/add/user`
+- `/add/item`
+- `/update/rating`
+
+### Rodar testes:
+```bash
+python -m pytest -v
+```
+
+---
+
+## 🔌 Endpoints disponíveis
 
 ### GET /
-Retorna o status da API.
+Status da API.
 
 ### GET /similar/{movie_id}
 Recomenda filmes semelhantes ao título informado.
@@ -131,6 +190,15 @@ Gera recomendações personalizadas para um usuário.
 
 **Exemplo**  
 `/user/1`
+
+### POST /add/user
+Adiciona novo usuário.
+
+### POST /add/item
+Adiciona novo filme.
+
+### PUT /update/rating
+Atualiza a nota de um usuário para um filme.
 
 ---
 
@@ -148,14 +216,18 @@ Gera recomendações personalizadas para um usuário.
 
 ## 🏁 Conclusão
 
-O projeto entrega:
+Este projeto demonstra:
 
-- Modelo de recomendação funcional e eficiente
+- ✔ Implementação completa de um sistema de recomendação
 
-- API totalmente operacional com FastAPI
+- ✔ API funcional em FastAPI
 
-- Container Docker permitindo portabilidade total
+- ✔ Testes automatizados
 
-- Código organizado, comentado e modular
+- ✔ Conteinerização via Docker
+
+- ✔ Organização modular
+
+- ✔ Documentação completa
 
 Este trabalho demonstra domínio prático de sistemas de recomendação e desenvolvimento de APIs modernas.

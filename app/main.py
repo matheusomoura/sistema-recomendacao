@@ -1,122 +1,141 @@
 from pathlib import Path
-from typing import List
+from typing import Dict
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from .model import RecommenderModel
+from app.model import RecommenderModel
 
-# Caminhos dos arquivos de dados
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data" / "ml-latest-small"
-
-RATINGS_PATH = DATA_DIR / "ratings.csv"
-MOVIES_PATH = DATA_DIR / "movies.csv"
-
-# Inicializa modelo de recomendação
-recommender = RecommenderModel(
-    ratings_path=RATINGS_PATH,
-    movies_path=MOVIES_PATH
-)
 
 app = FastAPI(
     title="Sistema de Recomendação - MovieLens",
-    version="1.0.0"
+    description="API do trabalho final | Desenvolvimento de Sistemas de IA",
+    version="1.0.0",
 )
 
-# -----------------------------
-# MODELOS Pydantic (entrada)
-# -----------------------------
+# ----------------------------------------------------------------------
+# Instancia única do modelo de recomendação
+# ----------------------------------------------------------------------
+BASE_DIR = Path("data/ml-latest-small")
 
-class RatingInput(BaseModel):
-    movie_id: int
-    rating: float
+recommender = RecommenderModel(
+    ratings_path=BASE_DIR / "ratings.csv",
+    movies_path=BASE_DIR / "movies.csv",
+)
+
+# "Banco" em memória só para demonstrar os endpoints de criação
+fake_users_db: Dict[int, Dict] = {}
+fake_items_db: Dict[int, Dict] = {}
 
 
+# ----------------------------------------------------------------------
+# Schemas Pydantic para os endpoints de POST/PUT
+# ----------------------------------------------------------------------
 class NewUserInput(BaseModel):
-    user_id: int
-    ratings: List[RatingInput]
+    userId: int
+    name: str
 
 
 class NewMovieInput(BaseModel):
-    movie_id: int
+    movieId: int
     title: str
     genres: str
 
 
-# "Banco de dados" em memória (apenas para fins didáticos)
-new_users: List[NewUserInput] = []
-new_movies: List[NewMovieInput] = []
+class RatingInput(BaseModel):
+    userId: int
+    movieId: int
+    rating: float
 
 
-# -----------------------------
-# ENDPOINTS EXISTENTES
-# -----------------------------
-
+# ----------------------------------------------------------------------
+# Endpoints
+# ----------------------------------------------------------------------
 @app.get("/")
 def root():
-    return {
-        "message": "API do Sistema de Recomendação – MovieLens",
-        "endpoints": ["/similar/{movie_id}", "/user/{user_id}", "/add/user", "/add/item"]
-    }
+    """Endpoint raiz: mostra status da API."""
+    return {"status": "ok", "message": "API de recomendação ativa"}
 
 
 @app.get("/similar/{movie_id}")
 def similar_movies(movie_id: int, top_n: int = 5):
     """
-    Retorna filmes semelhantes ao movie_id informado.
+    Retorna filmes similares ao movie_id informado.
     """
     try:
         result = recommender.get_similar_movies(movie_id=movie_id, top_n=top_n)
         return result.to_dict(orient="records")
-    except Exception as e:
-        return {"erro": str(e)}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @app.get("/user/{user_id}")
 def user_recommendations(user_id: int, top_n: int = 5, min_rating: float = 4.0):
     """
-    Retorna recomendações de filmes para um usuário específico.
+    Retorna recomendações personalizadas para um usuário.
     """
     try:
         result = recommender.recommend_for_user(
             user_id=user_id,
             top_n=top_n,
-            min_rating=min_rating
+            min_rating=min_rating,
         )
         return result.to_dict(orient="records")
     except ValueError as e:
-        return {"erro": str(e)}
-    except Exception as e:
-        return {"erro": str(e)}
+        raise HTTPException(status_code=404, detail=str(e))
 
 
-# -----------------------------
-# NOVOS ENDPOINTS DA ETAPA 4
-# -----------------------------
+# ------------------------- NOVOS ENDPOINTS -----------------------------
+
 
 @app.post("/add/user")
 def add_user(user: NewUserInput):
     """
-    Recebe um novo usuário com suas avaliações.
-    Os dados são armazenados em memória (new_users) apenas para demonstração.
+    Adiciona um novo usuário.
+    Obs.: aqui está apenas em memória, para fins didáticos do trabalho.
     """
-    new_users.append(user)
+    if user.userId in fake_users_db:
+        raise HTTPException(status_code=400, detail="Usuário já cadastrado.")
+
+    fake_users_db[user.userId] = user.dict()
     return {
-        "message": "Usuário recebido com sucesso.",
-        "user_id": user.user_id,
-        "total_usuarios_registrados": len(new_users)
+        "message": "Usuário adicionado com sucesso.",
+        "user": fake_users_db[user.userId],
     }
 
 
 @app.post("/add/item")
-def add_item(movie: NewMovieInput):
+def add_item(item: NewMovieInput):
     """
-    Recebe um novo filme (item) e armazena em memória (new_movies).
+    Adiciona um novo filme (item).
+    Também fica apenas em memória, não altera o CSV original.
     """
-    new_movies.append(movie)
+    if item.movieId in fake_items_db:
+        raise HTTPException(status_code=400, detail="Filme já cadastrado.")
+
+    fake_items_db[item.movieId] = item.dict()
     return {
-        "message": "Filme recebido com sucesso.",
-        "movie_id": movie.movie_id,
-        "total_filmes_registrados": len(new_movies)
+        "message": "Filme adicionado com sucesso.",
+        "item": fake_items_db[item.movieId],
     }
+
+
+@app.put("/update/rating")
+def update_rating(payload: RatingInput):
+    """
+    Atualiza as preferências de um usuário (nota para um filme).
+    Isso realmente altera a matriz de ratings em memória
+    e reconstrói o modelo de recomendação.
+    """
+    try:
+        recommender.update_rating(
+            user_id=payload.userId,
+            movie_id=payload.movieId,
+            rating=payload.rating,
+        )
+        return {"message": "Avaliação registrada/atualizada com sucesso."}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        # fallback genérico para não quebrar a API
+        raise HTTPException(status_code=500, detail=f"Erro ao atualizar rating: {e}")

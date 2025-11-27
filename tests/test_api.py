@@ -1,41 +1,40 @@
-import os
-import sys
-
-# adiciona a pasta raiz do projeto no caminho do Python
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-
 from fastapi.testclient import TestClient
+
 from app.main import app
 
 client = TestClient(app)
 
 
-# -------------------------------------------------------
-# Teste 1: API está de pé
-# -------------------------------------------------------
 def test_root():
     response = client.get("/")
     assert response.status_code == 200
-    assert "Sistema de Recomendação" in response.json()["message"]
+    data = response.json()
+    assert data["status"] == "ok"
 
 
-# -------------------------------------------------------
-# Teste 2: Filmes semelhantes
-# -------------------------------------------------------
 def test_similar_movies():
-    response = client.get("/similar/1")
+    response = client.get("/similar/1?top_n=5")
     assert response.status_code == 200
+
     data = response.json()
+    assert isinstance(data, list)
     assert len(data) > 0
-    assert "movieId" in data[0]
+
+    first = data[0]
+    assert "movieId" in first
+    assert "title" in first
+    assert "similarity" in first
 
 
-# -------------------------------------------------------
-# Teste 3: Recomendação para usuário
-# -------------------------------------------------------
 def test_recommend_user():
-    response = client.get("/user/1")
+    response = client.get("/user/1?top_n=5&min_rating=4.0")
     assert response.status_code == 200
+
     data = response.json()
+    assert isinstance(data, list)
     assert len(data) > 0
-    assert "movieId" in data[0]
+
+    first = data[0]
+    assert "movieId" in first
+    assert "title" in first
+    assert "score" in first
