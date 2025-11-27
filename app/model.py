@@ -5,207 +5,124 @@ import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 
 
-class RecommenderSystem:
+class RecommenderModel:
     """
-    Sistema de recomendação baseado em filtragem colaborativa por itens.
-
-    Ideia:
-    - Usamos as notas (ratings) dos usuários para os filmes.
-    - Construímos uma matriz usuário x filme.
-    - Calculamos a similaridade entre filmes (itens) usando cosseno.
-    - Para recomendar:
-        * Para um filme: pegamos os mais parecidos com ele.
-        * Para um usuário: olhamos os filmes que ele avaliou bem
-          e combinamos as similaridades para sugerir novos filmes.
+    Modelo de recomendação baseado em Filtragem Colaborativa por Itens
+    usando similaridade de cosseno.
     """
 
-    def __init__(self):
-        # Descobre o caminho base do projeto (sistema-recomendacao)
-        base_dir = Path(__file__).resolve().parents[1]
-        data_dir = base_dir / "data" / "ml-latest-small"
-
-        ratings_path = data_dir / "ratings.csv"
-        movies_path = data_dir / "movies.csv"
-
+    def __init__(self, ratings_path: Path, movies_path: Path):
         # Carrega dados
         self.ratings = pd.read_csv(ratings_path)
         self.movies = pd.read_csv(movies_path)
 
-        # Garante tipos adequados
-        self.ratings["userId"] = self.ratings["userId"].astype(int)
-        self.ratings["movieId"] = self.ratings["movieId"].astype(int)
-
-        # Monta matriz usuário x filme (linhas = usuários, colunas = filmes)
-        self.user_item_matrix = self._build_user_item_matrix()
-
-        # Calcula a matriz de similaridade entre filmes
-        self.item_similarity, self.movie_id_to_idx, self.idx_to_movie_id = (
-            self._build_item_similarity()
-        )
-
-    # ------------------------------------------------------------------
-    # Construção da matriz usuário x item
-    # ------------------------------------------------------------------
-    def _build_user_item_matrix(self) -> pd.DataFrame:
-        """
-        Cria uma tabela onde:
-          - cada linha é um usuário
-          - cada coluna é um filme (movieId)
-          - cada célula é a nota (rating) que o usuário deu ao filme
-        """
+        # Cria matriz usuário x filme (userId x movieId)
         user_item = self.ratings.pivot_table(
             index="userId",
             columns="movieId",
-            values="rating",
-            fill_value=0.0,  # onde não tem nota, colocamos 0
+            values="rating"
         )
-        return user_item
 
-    # ------------------------------------------------------------------
-    # Similaridade entre filmes (itens)
-    # ------------------------------------------------------------------
-    def _build_item_similarity(self):
+        self.user_item = user_item
+
+        # Matriz filme x usuário (para similaridade entre filmes)
+        item_user = user_item.T  # transposta
+        item_user = item_user.fillna(0.0)
+
+        self.item_user = item_user
+
+        # Calcula matriz de similaridade entre filmes
+        sim_matrix = cosine_similarity(self.item_user)
+
+        self.sim_matrix = pd.DataFrame(
+            sim_matrix,
+            index=self.item_user.index,
+            columns=self.item_user.index
+        )
+
+    # -------------------------------------------------------------
+    # 1) Filmes semelhantes a um filme específico
+    # -------------------------------------------------------------
+    def get_similar_movies(self, movie_id: int, top_n: int = 5) -> pd.DataFrame:
         """
-        Calcula a similaridade de cosseno entre filmes.
-
-        - Pegamos a matriz usuário x filme.
-        - Transpomos para filme x usuário.
-        - Aplicamos cosine_similarity para obter:
-            matriz [num_filmes x num_filmes]
+        Retorna os top_n filmes mais semelhantes ao movie_id informado.
         """
-        # Transpõe: agora linhas = filmes, colunas = usuários
-        item_matrix = self.user_item_matrix.T
 
-        # Guarda o mapeamento de índice para movieId
-        movie_ids = item_matrix.index.to_list()
-        movie_id_to_idx = {movie_id: idx for idx, movie_id in enumerate(movie_ids)}
-        idx_to_movie_id = {idx: movie_id for movie_id, idx in movie_id_to_idx.items()}
+        if movie_id not in self.sim_matrix.index:
+            raise ValueError(f"movie_id {movie_id} não encontrado na matriz de similaridade.")
 
-        # Converte para numpy array
-        item_matrix_np = item_matrix.values
+        # Similaridade desse filme com todos os outros
+        scores = self.sim_matrix[movie_id].sort_values(ascending=False)
 
-        # Similaridade de cosseno entre linhas (filmes)
-        similarity_matrix = cosine_similarity(item_matrix_np)
-
-        return similarity_matrix, movie_id_to_idx, idx_to_movie_id
-
-    # ------------------------------------------------------------------
-    # Recomendar filmes semelhantes a um filme específico
-    # ------------------------------------------------------------------
-    def recommend_similar_movies(self, movie_id: int, top_n: int = 5) -> pd.DataFrame:
-        """
-        Retorna os 'top_n' filmes mais parecidos com o filme informado.
-
-        :param movie_id: ID do filme de referência (coluna movieId do movies.csv)
-        :param top_n: quantidade de recomendações
-        """
-        if movie_id not in self.movie_id_to_idx:
-            raise ValueError(f"movie_id {movie_id} não encontrado na base.")
-
-        movie_idx = self.movie_id_to_idx[movie_id]
-
-        # Similaridades desse filme com todos os outros
-        sim_scores = self.item_similarity[movie_idx]
-
-        # Ordena pela similaridade (maior -> menor)
-        # ignorando o próprio filme (idx diferente)
-        similar_indices = np.argsort(sim_scores)[::-1]  # ordem decrescente
-        similar_indices = [idx for idx in similar_indices if idx != movie_idx]
+        # Remove ele mesmo
+        scores = scores.drop(labels=[movie_id])
 
         # Pega os top_n
-        top_indices = similar_indices[:top_n]
+        top_ids = scores.head(top_n).index
 
-        # Converte índices de volta para movieId
-        similar_movie_ids = [self.idx_to_movie_id[idx] for idx in top_indices]
+        # Junta com os dados dos filmes
+        result = self.movies[self.movies["movieId"].isin(top_ids)].copy()
+        result["similarity"] = scores.loc[top_ids].values
 
-        # Junta com o dataframe de filmes
-        result = self.movies[self.movies["movieId"].isin(similar_movie_ids)].copy()
-
-        # Adiciona coluna com a similaridade
-        result["similarity"] = [
-            sim_scores[self.movie_id_to_idx[movie_id_sim]]
-            for movie_id_sim in similar_movie_ids
-        ]
-
-        # Ordena do mais similar para o menos similar
+        # Ordena por similaridade (maior primeiro)
         result = result.sort_values(by="similarity", ascending=False)
 
         return result[["movieId", "title", "genres", "similarity"]]
 
-    # ------------------------------------------------------------------
-    # Recomendar filmes para um usuário com base nas notas dele
-    # ------------------------------------------------------------------
+    # -------------------------------------------------------------
+    # 2) Recomendações para um usuário específico
+    # -------------------------------------------------------------
     def recommend_for_user(
         self,
         user_id: int,
         top_n: int = 5,
-        min_rating: float = 4.0,
+        min_rating: float = 4.0
     ) -> pd.DataFrame:
         """
-        Recomenda filmes para um usuário baseado nas notas que ele deu.
-
-        Estratégia:
-        - Pegamos os filmes que o usuário avaliou com nota >= min_rating.
-        - Para cada um desses filmes, olhamos a similaridade com outros filmes.
-        - Somamos as similaridades, criando uma espécie de "score" para cada filme.
-        - Removemos os filmes que o usuário já assistiu.
-        - Retornamos os top_n com maior score.
-
-        :param user_id: ID do usuário (coluna userId de ratings.csv)
-        :param top_n: quantidade de recomendações
-        :param min_rating: nota mínima para considerar que ele "gostou" de um filme
+        Gera recomendações de filmes para um usuário, com base
+        nas notas que ele já deu e na similaridade entre os filmes.
         """
-        if user_id not in self.user_item_matrix.index:
-            raise ValueError(f"user_id {user_id} não encontrado na base.")
 
-        # Filmes que o usuário avaliou
-        user_ratings = self.ratings[self.ratings["userId"] == user_id]
+        if user_id not in self.user_item.index:
+            raise ValueError(f"user_id {user_id} não encontrado na matriz usuário x filme.")
 
-        # Considera apenas filmes com nota >= min_rating
-        liked_movies = user_ratings[user_ratings["rating"] >= min_rating]
+        # Notas do usuário
+        user_ratings = self.user_item.loc[user_id].dropna()
 
-        if liked_movies.empty:
-            raise ValueError(
-                f"Usuário {user_id} não tem filmes avaliados com nota >= {min_rating}."
-            )
+        if user_ratings.empty:
+            raise ValueError("Usuário não possui avaliações suficientes.")
 
-        # Lista de movieIds que o usuário já viu
-        seen_movie_ids = set(user_ratings["movieId"].tolist())
+        # Filmes que ele avaliou bem (acima de min_rating)
+        liked = user_ratings[user_ratings >= min_rating]
 
-        # Vetor para acumular os scores
-        scores = np.zeros(self.item_similarity.shape[0])
+        # Se não houver nada acima do min_rating, pega os 5 melhores avaliados
+        if liked.empty:
+            liked = user_ratings.sort_values(ascending=False).head(5)
 
-        # Para cada filme que o usuário gostou:
-        for _, row in liked_movies.iterrows():
-            movie_id = int(row["movieId"])
-            rating = float(row["rating"])
+        # Acumula score para cada filme usando similaridade ponderada pela nota
+        scores = pd.Series(dtype=float)
 
-            if movie_id not in self.movie_id_to_idx:
+        for movie_id, rating in liked.items():
+            if movie_id not in self.sim_matrix.columns:
                 continue
 
-            movie_idx = self.movie_id_to_idx[movie_id]
+            sims = self.sim_matrix[movie_id]
 
-            # Similaridade desse filme para todos os outros
-            sim_vector = self.item_similarity[movie_idx]
+            # soma ponderada: similaridade * nota
+            scores = scores.add(sims * rating, fill_value=0.0)
 
-            # Soma ponderada pela nota (opcional)
-            scores += sim_vector * rating
+        # Remove filmes que o usuário já avaliou
+        scores = scores.drop(index=user_ratings.index, errors="ignore")
 
-        # Zera o score dos filmes que o usuário já viu
-        for seen_id in seen_movie_ids:
-            if seen_id in self.movie_id_to_idx:
-                seen_idx = self.movie_id_to_idx[seen_id]
-                scores[seen_idx] = 0.0
+        # Se não sobrar nada, retorna vazio
+        if scores.empty:
+            return pd.DataFrame(columns=["movieId", "title", "genres", "score"])
 
-        # Pega os índices com maiores scores
-        recommended_indices = np.argsort(scores)[::-1][:top_n]
-        recommended_movie_ids = [self.idx_to_movie_id[idx] for idx in recommended_indices]
+        # Pega top_n
+        top_ids = scores.sort_values(ascending=False).head(top_n).index
 
-        # Monta dataframe de resultado
-        result = self.movies[self.movies["movieId"].isin(recommended_movie_ids)].copy()
-        result["score"] = [
-            scores[self.movie_id_to_idx[movie_id]] for movie_id in recommended_movie_ids
-        ]
+        result = self.movies[self.movies["movieId"].isin(top_ids)].copy()
+        result["score"] = scores.loc[top_ids].values
 
         # Ordena por score
         result = result.sort_values(by="score", ascending=False)

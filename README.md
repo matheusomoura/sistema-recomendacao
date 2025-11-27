@@ -28,17 +28,28 @@ O sistema recomenda:
 
 
 │ ├── main.py → API FastAPI
+
 │ ├── model.py → Modelo de recomendação
+
 │ └── init.py
 │
+
 ├── data/
+
 │ └── ml-latest-small/ → Dataset MovieLens
+
 │
+
 ├── test_model.py → Testes do modelo
+
 ├── check_dataset.py → Teste de leitura do dataset
+
 │
+
 ├── Dockerfile → Container Docker
+
 ├── requirements.txt → Dependências
+
 └── README.md → Documentação
 
 ---
@@ -65,81 +76,86 @@ Foi utilizada a técnica de **Filtragem Colaborativa Baseada em Itens (Item-Base
 ```bash
 python -m venv .venv
 .\.venv\Scripts\activate
-
+```
 ---
 
 ### 2. Instalar dependências
+```bash
 pip install -r requirements.txt
+```
 
 ### 3. Rodar a API
+```bash
 uvicorn app.main:app --reload
+```
 
-Acessar:
+### Acessar:
 ➡ http://127.0.0.1:8000
 
 ➡ http://127.0.0.1:8000/docs
+
+---
 
 ## 🐳 Como rodar o projeto via Docker
 
-1. Construir imagem
+### 1. Construir imagem
+```bash
 docker build -t sistema-recomendacao .
+```
 
-2. Rodar container
+### 2. Rodar container
+```bash
 docker run -p 8000:8000 sistema-recomendacao
+```
 
-
-Acessar:
+### Acessar:
 ➡ http://127.0.0.1:8000
 
 ➡ http://127.0.0.1:8000/docs
 
-🧪 Endpoints
-GET /
+---
 
-Status da API
+## 🧪 Endpoints
 
-GET /similar/{movie_id}
+### GET /
+Retorna o status da API.
 
-Recomenda filmes semelhantes.
+### GET /similar/{movie_id}
+Recomenda filmes semelhantes ao título informado.
 
-Exemplo:
+**Exemplo**  
+`/similar/1`
 
-/similar/1
+### GET /user/{user_id}
+Gera recomendações personalizadas para um usuário.
 
-GET /user/{user_id}
+**Exemplo**  
+`/user/1`
 
-Recomenda filmes personalizados para um usuário.
+---
 
-Exemplo:
+## 📦 Tecnologias utilizadas
 
-/user/1
+- Python 3.11
+- Pandas
+- NumPy
+- Scikit-Learn
+- FastAPI
+- Uvicorn
+- Docker
 
-📦 Tecnologias utilizadas
+---
 
-Python 3.11
-
-Pandas
-
-NumPy
-
-Scikit-Learn
-
-FastAPI
-
-Uvicorn
-
-Docker
-
-🏁 Conclusão
+## 🏁 Conclusão
 
 O projeto entrega:
 
-Modelo de recomendação funcional e eficiente
+- Modelo de recomendação funcional e eficiente
 
-API totalmente operacional com FastAPI
+- API totalmente operacional com FastAPI
 
-Container Docker permitindo portabilidade total
+- Container Docker permitindo portabilidade total
 
-Código organizado, comentado e modular
+- Código organizado, comentado e modular
 
 Este trabalho demonstra domínio prático de sistemas de recomendação e desenvolvimento de APIs modernas.
